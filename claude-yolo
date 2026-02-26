@@ -1,0 +1,16 @@
+#!/bin/bash
+
+set -e
+
+if [ -z "$1" ]; then
+  echo "Usage: $0 /path/to/repo"
+  exit 1
+fi
+
+docker run --rm -it \
+  -v "$1":/repo \
+  -v ~/.claude:/home/node/.claude:ro \
+  --read-only \
+  --tmpfs /tmp \
+  -w /repo \
+  coding-sandbox claude --dangerously-skip-permissions
