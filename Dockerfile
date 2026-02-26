@@ -1,17 +1,31 @@
-FROM node:20-slim
+FROM node:20-bookworm
 
-# Tools the agent commonly needs at runtime
-RUN apt-get update && apt-get install -y git curl jq && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    git \
+    ripgrep \
+    fzf \
+    zsh \
+    locales \
+    less \
+    procps \
+    jq \
+    && sed -i '/en_US.UTF-8/s/^# //g' /etc/locale.gen \
+    && locale-gen \
+    && rm -rf /var/lib/apt/lists/*
 
-# Install Claude Code using the official installer
-RUN curl -fsSL https://claude.ai/install.sh | bash
+ENV LANG=en_US.UTF-8
+ENV LC_ALL=en_US.UTF-8
+ENV NODE_OPTIONS=--max-old-space-size=4096
 
-# The installer puts the binary in /root/.local/bin/ which isn't on PATH for other users
-# Symlink it to a standard location so it's accessible after we switch to non-root
-RUN ln -s /root/.local/bin/claude /usr/local/bin/claude
+COPY entrypoint.sh /entrypoint.sh
 
-# Run as the non-root 'node' user (provided by the base image)
-# This ensures ~/.claude maps to /home/node/.claude as expected
 USER node
+RUN curl -fsSL https://claude.ai/install.sh | bash
+ENV PATH="/home/node/.local/bin:$PATH"
 
-WORKDIR /repo
+RUN mkdir -p /home/node/.claude && touch /home/node/.zshrc
+
+WORKDIR /home/node/repo
+
+ENTRYPOINT ["/entrypoint.sh"]
+CMD ["zsh"]

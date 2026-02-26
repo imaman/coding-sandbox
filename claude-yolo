@@ -1,34 +1,19 @@
-#!/bin/bash
+#!/usr/bin/env bash
+set -euo pipefail
 
-set -e
-
-if [ -z "$1" ]; then
-  echo "Usage: $0 /path/to/repo"
-  exit 1
-fi
-
-REPO="$1"
+IMAGE_NAME="claude-code-dev"
+REPO_DIR="${1:?Usage: $0 <repo-dir> [claude args...]}"
+REPO_DIR="$(cd "$REPO_DIR" && pwd)"
 shift
+CLAUDE_DIR="$HOME/.claude"
 
-bwrap \
-  --ro-bind /usr /usr \
-  --ro-bind /lib /lib \
-  --ro-bind /lib64 /lib64 \
-  --ro-bind /bin /bin \
-  --ro-bind /sbin /sbin \
-  --ro-bind /etc/resolv.conf /etc/resolv.conf \
-  --ro-bind /etc/ssl /etc/ssl \
-  --ro-bind /etc/ca-certificates /etc/ca-certificates \
-  --ro-bind ~/.local/share/claude ~/.local/share/claude \
-  --ro-bind ~/.local/bin ~/.local/bin \
-  --ro-bind ~/.claude.json ~/.claude.json \
-  --bind ~/.claude ~/.claude \
-  --bind ~/.local/state/claude ~/.local/state/claude \
-  --bind "$REPO" "$REPO" \
-  --tmpfs /tmp \
-  --dev /dev \
-  --proc /proc \
-  --setenv HOME /home/imaman \
-  --setenv PATH /home/imaman/.local/bin:/usr/local/bin:/usr/bin:/bin \
-  --setenv TERM "$TERM" \
-  claude --dangerously-skip-permissions "$@"
+docker build \
+    -t "$IMAGE_NAME" \
+    "$(dirname "$0")"
+
+docker run --rm -it \
+    -e TERM=xterm-256color \
+    -v "$CLAUDE_DIR:/host-claude:ro" \
+    -v "$HOME/.claude.json:/host-claude.json:ro" \
+    -v "$REPO_DIR:/home/node/repo" \
+    "$IMAGE_NAME" claude --dangerously-skip-permissions "$@"
