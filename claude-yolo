@@ -7,10 +7,28 @@ if [ -z "$1" ]; then
   exit 1
 fi
 
-docker run --rm -it \
-  -v "$1":/repo \
-  -v ~/.claude:/home/node/.claude:ro \
-  --read-only \
+REPO="$1"
+shift
+
+bwrap \
+  --ro-bind /usr /usr \
+  --ro-bind /lib /lib \
+  --ro-bind /lib64 /lib64 \
+  --ro-bind /bin /bin \
+  --ro-bind /sbin /sbin \
+  --ro-bind /etc/resolv.conf /etc/resolv.conf \
+  --ro-bind /etc/ssl /etc/ssl \
+  --ro-bind /etc/ca-certificates /etc/ca-certificates \
+  --ro-bind ~/.local/share/claude ~/.local/share/claude \
+  --ro-bind ~/.local/bin ~/.local/bin \
+  --ro-bind ~/.claude.json ~/.claude.json \
+  --bind ~/.claude ~/.claude \
+  --bind ~/.local/state/claude ~/.local/state/claude \
+  --bind "$REPO" "$REPO" \
   --tmpfs /tmp \
-  -w /repo \
-  coding-sandbox claude --dangerously-skip-permissions
+  --dev /dev \
+  --proc /proc \
+  --setenv HOME /home/imaman \
+  --setenv PATH /home/imaman/.local/bin:/usr/local/bin:/usr/bin:/bin \
+  --setenv TERM "$TERM" \
+  claude --dangerously-skip-permissions "$@"
