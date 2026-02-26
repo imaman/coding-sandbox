@@ -1,7 +1,7 @@
 FROM node:20-slim
 
 # Tools the agent commonly needs at runtime
-RUN apt-get update && apt-get install -y git curl jq && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y git curl jq ncurses-base && rm -rf /var/lib/apt/lists/*
 
 # Install Claude Code using the official installer
 RUN curl -fsSL https://claude.ai/install.sh | bash
