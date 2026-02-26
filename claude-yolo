@@ -1,15 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-IMAGE_NAME="claude-code-dev"
+IMAGE_NAME="coding-sandbox"
 REPO_DIR="${1:?Usage: $0 <repo-dir> [claude args...]}"
 REPO_DIR="$(cd "$REPO_DIR" && pwd)"
 shift
 CLAUDE_DIR="$HOME/.claude"
-
-docker build \
-    -t "$IMAGE_NAME" \
-    "$(dirname "$0")"
 
 docker run --rm -it \
     -e TERM=xterm-256color \
