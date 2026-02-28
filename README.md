@@ -1,4 +1,4 @@
-# coding-sandbox
+# coding-capsule
 
 Run Claude Code in a sandboxed Docker container. The agent can read/write files in your repo but cannot access anything else on your machine (no SSH keys, AWS credentials, other repos, etc.).
 
@@ -12,13 +12,13 @@ Run Claude Code in a sandboxed Docker container. The agent can read/write files 
 Build the image:
 
 ```bash
-docker build -t coding-sandbox .
+docker build -t coding-capsule .
 ```
 
 ## Usage
 
 ```bash
-./claude-yolo /path/to/repo
+./coding-capsule /path/to/repo
 ```
 
 This runs Claude Code in yolo mode (auto-approves all actions) against the given repo.
