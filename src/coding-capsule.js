@@ -9,7 +9,8 @@ import { hideBin } from "yargs/helpers";
 
 const IMAGE_NAME = "coding-capsule";
 
-const DOCKERFILE = `FROM node:20-bookworm
+function dockerfile(claudeVersion) {
+  return `FROM node:20-bookworm
 
 RUN apt-get update && apt-get install -y --no-install-recommends \\
     git \\
@@ -31,7 +32,7 @@ ENV NODE_OPTIONS=--max-old-space-size=4096
 COPY entrypoint.sh /entrypoint.sh
 
 USER node
-RUN curl -fsSL https://claude.ai/install.sh | bash
+RUN curl -fsSL https://claude.ai/install.sh | bash -s ${claudeVersion}
 ENV PATH="/home/node/.local/bin:$PATH"
 
 RUN mkdir -p /home/node/.claude && touch /home/node/.zshrc
@@ -41,6 +42,7 @@ WORKDIR /home/node/repo
 ENTRYPOINT ["/entrypoint.sh"]
 CMD ["zsh"]
 `;
+}
 
 const ENTRYPOINT = `#!/bin/bash
 set -e
@@ -78,9 +80,20 @@ if (!fs.existsSync(repoDir) || !fs.statSync(repoDir).isDirectory()) {
 const claudeDir = path.join(os.homedir(), ".claude");
 const claudeJson = path.join(os.homedir(), ".claude.json");
 
+// Resolve latest Claude Code version
+const claudeVersion = await fetch(
+  "https://registry.npmjs.org/@anthropic-ai/claude-code/latest"
+)
+  .then((r) => {
+    if (!r.ok) throw new Error(`npm registry returned ${r.status}`);
+    return r.json();
+  })
+  .then((data) => data.version);
+console.log(`Using Claude Code v${claudeVersion}`);
+
 // Create temp build context
 const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "coding-capsule-"));
-fs.writeFileSync(path.join(tmpDir, "Dockerfile"), DOCKERFILE);
+fs.writeFileSync(path.join(tmpDir, "Dockerfile"), dockerfile(claudeVersion));
 fs.writeFileSync(path.join(tmpDir, "entrypoint.sh"), ENTRYPOINT, {
   mode: 0o755,
 });
