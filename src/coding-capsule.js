@@ -4,6 +4,8 @@ const { execFileSync, spawn } = require("child_process");
 const path = require("path");
 const os = require("os");
 const fs = require("fs");
+const yargs = require("yargs/yargs");
+const { hideBin } = require("yargs/helpers");
 
 const IMAGE_NAME = "coding-capsule";
 
@@ -52,14 +54,21 @@ cp /host-claude.json /home/node/.claude.json 2>/dev/null || true
 exec "$@"
 `;
 
-const args = process.argv.slice(2);
-if (args.length === 0) {
-  console.error("Usage: coding-capsule <repo-dir> [claude args...]");
-  process.exit(1);
-}
+const argv = yargs(hideBin(process.argv))
+  .usage("$0 <repo-dir> [claude args..]")
+  .command("$0 <repo-dir>", "Run Claude Code in a sandboxed Docker container", (yargs) => {
+    yargs.positional("repo-dir", {
+      describe: "Path to the repository directory to mount",
+      type: "string",
+    });
+  })
+  .strict(false)
+  .help()
+  .version()
+  .parseSync();
 
-const repoDir = path.resolve(args[0]);
-const claudeArgs = args.slice(1);
+const repoDir = path.resolve(argv.repoDir);
+const claudeArgs = argv._.map(String);
 
 if (!fs.existsSync(repoDir) || !fs.statSync(repoDir).isDirectory()) {
   console.error(`Error: ${repoDir} is not a valid directory`);
