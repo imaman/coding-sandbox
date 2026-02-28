@@ -2,6 +2,7 @@
   "name": "coding-capsule",
   "version": "0.15.0",
   "description": "Run Claude Code in a sandboxed Docker container",
+  "type": "commonjs",
   "bin": {
     "coding-capsule": "src/coding-capsule.js"
   },
@@ -14,7 +15,19 @@
     "sandbox",
     "claude-code"
   ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/imaman/coding-capsule.git"
+  },
+  "homepage": "https://github.com/imaman/coding-capsule#readme",
+  "bugs": {
+    "url": "https://github.com/imaman/coding-capsule/issues"
+  },
+  "author": "imaman",
   "license": "MIT",
+  "engines": {
+    "node": ">=20"
+  },
   "dependencies": {
     "yargs": "^18.0.0"
   }
