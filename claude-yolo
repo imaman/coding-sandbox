@@ -1,14 +1,15 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-IMAGE_NAME="coding-sandbox"
+IMAGE_NAME="yolo-sandbx"
 REPO_DIR="${1:?Usage: $0 <repo-dir> [claude args...]}"
 REPO_DIR="$(cd "$REPO_DIR" && pwd)"
 shift
 CLAUDE_DIR="$HOME/.claude"
 
-# Uncomment to rebuild the image before each run:
-# docker build -t "$IMAGE_NAME" "$(dirname "$0")"
+docker build \
+    -t "$IMAGE_NAME" \
+    "$(dirname "$0")"
 
 docker run --rm -it \
     -e TERM=xterm-256color \
