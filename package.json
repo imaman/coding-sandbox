@@ -1,0 +1,18 @@
+{
+  "name": "coding-capsule",
+  "version": "1.0.0",
+  "description": "Run Claude Code in a sandboxed Docker container",
+  "bin": {
+    "coding-capsule": "bin/cli.js"
+  },
+  "files": [
+    "bin/"
+  ],
+  "keywords": [
+    "claude",
+    "docker",
+    "sandbox",
+    "claude-code"
+  ],
+  "license": "MIT"
+}
