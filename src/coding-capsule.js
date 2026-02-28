@@ -1,11 +1,11 @@
 #!/usr/bin/env node
 
-const { execFileSync, spawn } = require("child_process");
-const path = require("path");
-const os = require("os");
-const fs = require("fs");
-const yargs = require("yargs/yargs");
-const { hideBin } = require("yargs/helpers");
+import { execFileSync, spawn } from "node:child_process";
+import path from "node:path";
+import os from "node:os";
+import fs from "node:fs";
+import yargs from "yargs/yargs";
+import { hideBin } from "yargs/helpers";
 
 const IMAGE_NAME = "coding-capsule";
 
