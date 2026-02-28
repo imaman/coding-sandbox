@@ -31,16 +31,17 @@ ENV NODE_OPTIONS=--max-old-space-size=4096
 
 COPY entrypoint.sh /entrypoint.sh
 
-USER node
-RUN curl -fsSL https://claude.ai/install.sh | bash -s ${claudeVersion}
 ENV PATH="/home/node/.local/bin:$PATH"
 
+USER node
 RUN mkdir -p /home/node/.claude && touch /home/node/.zshrc
 
 WORKDIR /home/node/repo
 
 ENTRYPOINT ["/entrypoint.sh"]
 CMD ["zsh"]
+
+RUN curl -fsSL https://claude.ai/install.sh | bash -s ${claudeVersion}
 `;
 }
 
