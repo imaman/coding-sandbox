@@ -14,12 +14,12 @@ Run Claude Code in a sandboxed Docker container. The agent can read/write files 
 npx coding-capsule /path/to/repo
 ```
 
-This builds a Docker image (if needed), mounts the repo, copies your Claude credentials into the container, and runs Claude Code in `--dangerously-skip-permissions` mode.
+This builds a Docker image (if needed), mounts the repo and your Claude credentials into the container, and runs Claude Code in `--dangerously-skip-permissions` mode.
 
-You can pass additional arguments through to Claude:
+You can pass additional positional arguments through to Claude:
 
 ```bash
-npx coding-capsule /path/to/repo --prompt "fix the failing tests"
+npx coding-capsule /path/to/repo "fix the failing tests"
 ```
 
 ### Global install
@@ -31,7 +31,7 @@ coding-capsule /path/to/repo
 
 ## What's sandboxed
 
-- Your Claude auth credentials are copied into the container (not bind-mounted read-write)
+- Your Claude auth credentials (`~/.claude` and `~/.claude.json`) are bind-mounted into the container
 - No access to `~/.ssh`, `~/.aws`, `~/.config`, or any other host files
 - Network is open (the agent needs it for npm, docs, etc.)
 - The Docker image is built automatically from an embedded Dockerfile — no manual setup required
@@ -64,7 +64,7 @@ We don't care about the agent messing with the repo itself — it's source-contr
 
 **Docker with egress proxy.** Run a filtering proxy (e.g., squid) that only allows traffic to known-good domains (npmjs.org, github.com, stackoverflow.com, etc.). This prevents exfiltration while allowing legitimate network use. Effective but high maintenance — you need to keep the allowlist up to date.
 
-**Docker with read-only filesystem and open network.** The container can only write to the mounted repo and `/tmp`. Network is unrestricted. The agent can't touch anything on the host machine, but it can make outbound network requests. The only sensitive data it could exfiltrate is the repo's source code and the mounted Claude session credentials.
+**Docker with open network and minimal host mounts.** Only the repo and Claude credentials are bind-mounted from the host. Network is unrestricted. The agent can't touch anything else on the host machine, but it can make outbound network requests. The only sensitive data it could exfiltrate is the repo's source code and the mounted Claude session credentials.
 
 **Dedicated VM.** Run the agent on a throwaway cloud instance or local VM with nothing of value on it. Strongest isolation but heaviest setup.
 
