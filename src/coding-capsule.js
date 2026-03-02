@@ -74,6 +74,17 @@ if (!fs.existsSync(repoDir) || !fs.statSync(repoDir).isDirectory()) {
 const claudeDir = path.join(os.homedir(), ".claude");
 const claudeJson = path.join(os.homedir(), ".claude.json");
 
+// Ensure config files exist on the host so we can mount them read-only.
+// An empty file is harmless and prevents code inside the container from
+// creating a new settings file with malicious hooks or permission allow-lists.
+const configFiles = ["settings.json", "settings.local.json"];
+for (const f of configFiles) {
+  const p = path.join(claudeDir, f);
+  if (!fs.existsSync(p)) {
+    fs.writeFileSync(p, "");
+  }
+}
+
 // Resolve latest Claude Code version
 const claudeVersion = await fetch(
   "https://registry.npmjs.org/@anthropic-ai/claude-code/latest"
@@ -91,6 +102,28 @@ fs.writeFileSync(path.join(tmpDir, "Dockerfile"), dockerfile(claudeVersion));
 fs.writeFileSync(path.join(tmpDir, "entrypoint.sh"), ENTRYPOINT, {
   mode: 0o755,
 });
+
+// Stage repo-level config for read-only overlay mounts.
+// Protects .claude/ (settings, agents, MCP config) from tampering inside the container.
+const repoConfigMounts = [];
+
+const repoClaudeDir = path.join(repoDir, ".claude");
+const stagedClaudeDir = path.join(tmpDir, "repo-claude");
+if (fs.existsSync(repoClaudeDir)) {
+  fs.cpSync(repoClaudeDir, stagedClaudeDir, { recursive: true });
+} else {
+  fs.mkdirSync(stagedClaudeDir);
+}
+repoConfigMounts.push("-v", `${stagedClaudeDir}:${repoClaudeDir}:ro`);
+
+const repoMcpJson = path.join(repoDir, ".mcp.json");
+const stagedMcpJson = path.join(tmpDir, "repo-mcp.json");
+if (fs.existsSync(repoMcpJson)) {
+  fs.copyFileSync(repoMcpJson, stagedMcpJson);
+} else {
+  fs.writeFileSync(stagedMcpJson, "");
+}
+repoConfigMounts.push("-v", `${stagedMcpJson}:${repoMcpJson}:ro`);
 
 try {
   // Build
@@ -116,9 +149,14 @@ try {
       "-v",
       `${claudeDir}:/home/node/.claude`,
       "-v",
-      `${claudeJson}:/home/node/.claude.json`,
+      `${claudeJson}:/home/node/.claude.json:ro`,
+      ...configFiles.flatMap((f) => [
+        "-v",
+        `${path.join(claudeDir, f)}:/home/node/.claude/${f}:ro`,
+      ]),
       "-v",
       `${repoDir}:${repoDir}`,
+      ...repoConfigMounts,
       IMAGE_NAME,
       "claude",
       "--dangerously-skip-permissions",
