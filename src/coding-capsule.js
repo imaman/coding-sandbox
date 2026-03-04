@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import { execFileSync, spawn } from "node:child_process";
+import { execFileSync } from "node:child_process";
 import path from "node:path";
 import os from "node:os";
 import fs from "node:fs";
@@ -120,6 +120,19 @@ if (fs.existsSync(repoMcpJson)) {
 }
 repoConfigMounts.push("-v", `${stagedMcpJson}:${repoMcpJson}:rw`);
 
+// Pre-create mount points in the repo as the current user so that Docker
+// (running as root) does not create them as root-owned entries on the host.
+const createdMountPoints = [];
+if (!fs.existsSync(repoClaudeDir)) {
+  fs.mkdirSync(repoClaudeDir);
+  createdMountPoints.push(repoClaudeDir);
+}
+if (!fs.existsSync(repoMcpJson)) {
+  fs.writeFileSync(repoMcpJson, "");
+  createdMountPoints.push(repoMcpJson);
+}
+
+let exitCode = 0;
 try {
   // Build
   execFileSync("docker", ["build", "-t", IMAGE_NAME, tmpDir], {
@@ -127,7 +140,7 @@ try {
   });
 
   // Run
-  const child = spawn(
+  execFileSync(
     "docker",
     [
       "run",
@@ -159,8 +172,18 @@ try {
     ],
     { stdio: "inherit" }
   );
-
-  child.on("exit", (code) => process.exit(code || 0));
+} catch (e) {
+  if (e.status != null) {
+    // Docker ran but exited non-zero; it already printed its error via stdio: "inherit".
+    exitCode = e.status;
+  } else {
+    // Failed to launch Docker (e.g., not installed).
+    throw e;
+  }
 } finally {
+  for (const p of createdMountPoints) {
+    fs.rmSync(p, { recursive: true, force: true });
+  }
   fs.rmSync(tmpDir, { recursive: true, force: true });
 }
+process.exit(exitCode);
