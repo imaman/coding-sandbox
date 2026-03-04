@@ -122,7 +122,7 @@ const mounts: Partial<Record<string, BindMount>> = {
   // Home .claude directory (staged copy; session data paths below punch through rw)
   "/home/node/.claude": { host: claudeDir, mode: "rw", snapshot: true },
   // Claude authentication
-  "/home/node/.claude.json": { host: claudeJson, mode: "rw" },
+  "/home/node/.claude.json": { host: claudeJson, mode: "rw", snapshot: true },
   // Session data persistence (rw directly into the real ~/.claude)
   "/home/node/.claude/projects": { host: path.join(claudeDir, "projects"), mode: "rw" },
   "/home/node/.claude/history.jsonl": { host: path.join(claudeDir, "history.jsonl"), mode: "rw" },
