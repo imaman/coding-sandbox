@@ -109,7 +109,7 @@ if (fs.existsSync(repoClaudeDir)) {
 } else {
   fs.mkdirSync(stagedClaudeDir);
 }
-repoConfigMounts.push("-v", `${stagedClaudeDir}:${repoClaudeDir}:ro`);
+repoConfigMounts.push("-v", `${stagedClaudeDir}:${repoClaudeDir}:rw`);
 
 const repoMcpJson = path.join(repoDir, ".mcp.json");
 const stagedMcpJson = path.join(tmpDir, "repo-mcp.json");
@@ -118,7 +118,7 @@ if (fs.existsSync(repoMcpJson)) {
 } else {
   fs.writeFileSync(stagedMcpJson, "");
 }
-repoConfigMounts.push("-v", `${stagedMcpJson}:${repoMcpJson}:ro`);
+repoConfigMounts.push("-v", `${stagedMcpJson}:${repoMcpJson}:rw`);
 
 try {
   // Build
@@ -142,9 +142,9 @@ try {
       "--workdir",
       repoDir,
       "-v",
-      `${stagedHomeClaudeDir}:/home/node/.claude:ro`,
+      `${stagedHomeClaudeDir}:/home/node/.claude:rw`,
       "-v",
-      `${claudeJson}:/home/node/.claude.json:ro`,
+      `${claudeJson}:/home/node/.claude.json:rw`,
       ...sessionDataPaths.flatMap((p) => [
         "-v",
         `${path.join(claudeDir, p)}:/home/node/.claude/${p}`,
