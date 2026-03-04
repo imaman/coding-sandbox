@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import { execFileSync, spawn } from "node:child_process";
+import { execFileSync } from "node:child_process";
 import path from "node:path";
 import os from "node:os";
 import fs from "node:fs";
@@ -120,6 +120,29 @@ if (fs.existsSync(repoMcpJson)) {
 }
 repoConfigMounts.push("-v", `${stagedMcpJson}:${repoMcpJson}:ro`);
 
+// Pre-create mount points so Docker doesn't leave root-owned entries on the host.
+// Here's what happens at mounting time:
+// 1. Docker bind-mounts repoDir into the container at the same path
+// 2. Docker then overlays staged copies on top: stagedClaudeDir → <repoDir>/.claude,
+//    stagedMcpJson → <repoDir>/.mcp.json
+// 3. For these overlay mounts, Docker needs the target paths to exist inside the
+//    already-mounted repoDir — which means they must exist on the host filesystem
+// 4. If they don't exist, the Docker daemon (running as root) creates them as
+//    root-owned directories (even for targets that should be files, e.g., .mcp.json)
+// 5. After the container exits, these root-owned entries remain in the user's repo
+// By creating them ourselves beforehand (as the current user) we avoid step 4.
+// They are cleaned up on exit if we were the ones who created them.
+const createdMountPoints = [];
+if (!fs.existsSync(repoClaudeDir)) {
+  fs.mkdirSync(repoClaudeDir);
+  createdMountPoints.push(repoClaudeDir);
+}
+if (!fs.existsSync(repoMcpJson)) {
+  fs.writeFileSync(repoMcpJson, "");
+  createdMountPoints.push(repoMcpJson);
+}
+
+let exitCode = 0;
 try {
   // Build
   execFileSync("docker", ["build", "-t", IMAGE_NAME, tmpDir], {
@@ -127,7 +150,7 @@ try {
   });
 
   // Run
-  const child = spawn(
+  execFileSync(
     "docker",
     [
       "run",
@@ -142,9 +165,9 @@ try {
       "--workdir",
       repoDir,
       "-v",
-      `${stagedHomeClaudeDir}:/home/node/.claude:ro`,
+      `${stagedHomeClaudeDir}:/home/node/.claude:rw`,
       "-v",
-      `${claudeJson}:/home/node/.claude.json:ro`,
+      `${claudeJson}:/home/node/.claude.json:rw`,
       ...sessionDataPaths.flatMap((p) => [
         "-v",
         `${path.join(claudeDir, p)}:/home/node/.claude/${p}`,
@@ -159,8 +182,19 @@ try {
     ],
     { stdio: "inherit" }
   );
-
-  child.on("exit", (code) => process.exit(code || 0));
+} catch (e) {
+  if (e.status != null) {
+    // Docker ran but exited non-zero; it already printed its error via stdio: "inherit".
+    exitCode = e.status;
+  } else {
+    // Failed to launch Docker (e.g., not installed).
+    throw e;
+  }
 } finally {
+  // Clean up mount points we pre-created (see comment at creation site above).
+  for (const p of createdMountPoints) {
+    fs.rmSync(p, { recursive: true, force: true });
+  }
   fs.rmSync(tmpDir, { recursive: true, force: true });
 }
+process.exit(exitCode);
