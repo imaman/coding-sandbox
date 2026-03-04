@@ -99,9 +99,6 @@ fs.writeFileSync(path.join(tmpDir, "entrypoint.sh"), ENTRYPOINT, {
 const repoClaudeDir = path.join(repoDir, ".claude");
 const repoMcpJson = path.join(repoDir, ".mcp.json");
 
-// ── Declarative bind-mount table ──────────────────────────────────────
-// To add a new bind mount, add one entry here. The processing loop below
-// handles staging, mount-point pre-creation, and Docker flag generation.
 type BindMount = {
   host: string;
   mode: "ro" | "rw";
@@ -118,19 +115,21 @@ type BindMount = {
   ensureHost?: boolean;
 };
 
+// To add a new bind mount, add one entry here. The processing loop below
+// handles staging, mount-point pre-creation, and Docker flag generation.
 const mounts: Partial<Record<string, BindMount>> = {
+  // Settings and authentication
+  "/home/node/.claude.json": { host: claudeJson, mode: "rw", snapshot: true },
   // Home .claude directory (staged copy; session data paths below punch through rw)
   "/home/node/.claude": { host: claudeDir, mode: "rw", snapshot: true },
-  // Claude authentication
-  "/home/node/.claude.json": { host: claudeJson, mode: "rw", snapshot: true },
   // Session data persistence (rw directly into the real ~/.claude)
   "/home/node/.claude/projects": { host: path.join(claudeDir, "projects"), mode: "rw" },
   "/home/node/.claude/history.jsonl": { host: path.join(claudeDir, "history.jsonl"), mode: "rw" },
   // Repository
   [repoDir]: { host: repoDir, mode: "rw" },
   // Repo config overlays (read-only staged copies protect settings from tampering)
-  [repoClaudeDir]: { host: repoClaudeDir, mode: "ro", snapshot: true, ensureHost: true },
-  [repoMcpJson]: { host: repoMcpJson, mode: "ro", type: "file", snapshot: true, ensureHost: true },
+  [repoClaudeDir]: { host: repoClaudeDir, mode: "rw", snapshot: true, ensureHost: true },
+  [repoMcpJson]: { host: repoMcpJson, mode: "rw", type: "file", snapshot: true, ensureHost: true },
 };
 
 // ── Process mount table ───────────────────────────────────────────────
