@@ -96,54 +96,98 @@ fs.writeFileSync(path.join(tmpDir, "entrypoint.sh"), ENTRYPOINT, {
   mode: 0o755,
 });
 
-// Copy ~/.claude/ to tmpDir for read-only mounting.
-// Session data paths are mounted back rw from the host for persistence.
-const stagedHomeClaudeDir = path.join(tmpDir, "home-claude");
-fs.cpSync(claudeDir, stagedHomeClaudeDir, { recursive: true });
-const sessionDataPaths = ["projects", "history.jsonl"];
-
-// Stage repo-level config for read-only overlay mounts.
-// Protects .claude/ (settings, agents, MCP config) from tampering inside the container.
-const repoConfigMounts: string[] = [];
-
 const repoClaudeDir = path.join(repoDir, ".claude");
-const stagedClaudeDir = path.join(tmpDir, "repo-claude");
-if (fs.existsSync(repoClaudeDir)) {
-  fs.cpSync(repoClaudeDir, stagedClaudeDir, { recursive: true });
-} else {
-  fs.mkdirSync(stagedClaudeDir);
-}
-repoConfigMounts.push("-v", `${stagedClaudeDir}:${repoClaudeDir}:ro`);
-
 const repoMcpJson = path.join(repoDir, ".mcp.json");
-const stagedMcpJson = path.join(tmpDir, "repo-mcp.json");
-if (fs.existsSync(repoMcpJson)) {
-  fs.copyFileSync(repoMcpJson, stagedMcpJson);
-} else {
-  fs.writeFileSync(stagedMcpJson, "");
-}
-repoConfigMounts.push("-v", `${stagedMcpJson}:${repoMcpJson}:ro`);
 
-// Pre-create mount points so Docker doesn't leave root-owned entries on the host.
-// Here's what happens at mounting time:
-// 1. Docker bind-mounts repoDir into the container at the same path
-// 2. Docker then overlays staged copies on top: stagedClaudeDir → <repoDir>/.claude,
-//    stagedMcpJson → <repoDir>/.mcp.json
-// 3. For these overlay mounts, Docker needs the target paths to exist inside the
-//    already-mounted repoDir — which means they must exist on the host filesystem
-// 4. If they don't exist, the Docker daemon (running as root) creates them as
-//    root-owned directories (even for targets that should be files, e.g., .mcp.json)
-// 5. After the container exits, these root-owned entries remain in the user's repo
-// By creating them ourselves beforehand (as the current user) we avoid step 4.
-// They are cleaned up on exit if we were the ones who created them.
+type BindMount = {
+  host: string;
+  mode: "ro" | "rw";
+  /** Whether the host path is a directory or a regular file. Defaults to "dir". */
+  type?: "dir" | "file";
+  /**
+   * When set, the host path is copied into a temporary directory before mounting, so
+   * the container sees an isolated snapshot rather than the live original. Mounts without
+   * this property are bound directly to the host path.
+   */
+  snapshot?: boolean;
+  // Pre-create the container path on the host so Docker doesn't leave
+  // root-owned entries (needed for overlay mounts inside an already-mounted volume).
+  ensureHost?: boolean;
+};
+
+// To add a new bind mount, add one entry here. The processing loop below
+// handles staging, mount-point pre-creation, and Docker flag generation.
+const mounts: Partial<Record<string, BindMount>> = {
+  // Settings and authentication
+  "/home/node/.claude.json": { host: claudeJson, mode: "rw", snapshot: true },
+  // Home .claude directory (staged copy; session data paths below punch through rw)
+  "/home/node/.claude": { host: claudeDir, mode: "rw", snapshot: true },
+  // Session data persistence (rw directly into the real ~/.claude)
+  "/home/node/.claude/projects": { host: path.join(claudeDir, "projects"), mode: "rw" },
+  "/home/node/.claude/history.jsonl": { host: path.join(claudeDir, "history.jsonl"), mode: "rw" },
+  // Repository
+  [repoDir]: { host: repoDir, mode: "rw" },
+  // Repo config overlays (read-only staged copies protect settings from tampering)
+  [repoClaudeDir]: { host: repoClaudeDir, mode: "rw", snapshot: true, ensureHost: true },
+  [repoMcpJson]: { host: repoMcpJson, mode: "rw", type: "file", snapshot: true, ensureHost: true },
+};
+
+// ── Process mount table ───────────────────────────────────────────────
+const dockerVolArgs: string[] = [];
 const createdMountPoints: string[] = [];
-if (!fs.existsSync(repoClaudeDir)) {
-  fs.mkdirSync(repoClaudeDir);
-  createdMountPoints.push(repoClaudeDir);
+
+// Sort mounts so that a parent directory is mounted before its children (overlays).
+// Plain localeCompare happens to get this right (a parent is always a string prefix of its
+// child, so it sorts first), but the explicit startsWith check makes the intent obvious.
+function withTrailingSlash(p: string): string {
+  return p.endsWith('/') ? p : p + '/';
 }
-if (!fs.existsSync(repoMcpJson)) {
-  fs.writeFileSync(repoMcpJson, "");
-  createdMountPoints.push(repoMcpJson);
+const sortedMounts = Object.entries(mounts).sort(([a], [b]) => {
+  const aSlash = withTrailingSlash(a);
+  const bSlash = withTrailingSlash(b);
+  if (b.startsWith(aSlash)) return -1; // a is parent of b
+  if (a.startsWith(bSlash)) return 1; // b is parent of a
+  return a.localeCompare(b); // siblings — order is irrelevant for correctness
+});
+
+for (const [container, m] of sortedMounts) {
+  const mount = m ?? failMe(`missing mount for ${container}`);
+  let hostPath = mount.host;
+
+  const entityType = mount.type ?? "dir";
+
+  // Snapshot: copy source into a dedicated temp dir so the container gets an isolated copy.
+  if (mount.snapshot) {
+    const snapshotDir = fs.mkdtempSync(path.join(tmpDir, "snapshot-"));
+    const staged = path.join(snapshotDir, path.basename(hostPath));
+    if (entityType === "dir") {
+      if (fs.existsSync(hostPath)) {
+        fs.cpSync(hostPath, staged, { recursive: true });
+      } else {
+        fs.mkdirSync(staged);
+      }
+    } else {
+      if (fs.existsSync(hostPath)) {
+        fs.copyFileSync(hostPath, staged);
+      } else {
+        fs.writeFileSync(staged, "");
+      }
+    }
+    hostPath = staged;
+  }
+
+  // Ensure the mount-point exists on the host (avoids root-owned leftovers).
+  if (mount.ensureHost && !fs.existsSync(container)) {
+    if (entityType === "dir") {
+      fs.mkdirSync(container);
+    } else {
+      fs.writeFileSync(container, "");
+    }
+    createdMountPoints.push(container);
+  }
+
+  const spec = `${hostPath}:${container}:${mount.mode}`;
+  dockerVolArgs.push("-v", spec);
 }
 
 let exitCode = 0;
@@ -168,17 +212,7 @@ try {
       `TERM=${process.env.TERM || "xterm-256color"}`,
       "--workdir",
       repoDir,
-      "-v",
-      `${stagedHomeClaudeDir}:/home/node/.claude:rw`,
-      "-v",
-      `${claudeJson}:/home/node/.claude.json:rw`,
-      ...sessionDataPaths.flatMap((p) => [
-        "-v",
-        `${path.join(claudeDir, p)}:/home/node/.claude/${p}`,
-      ]),
-      "-v",
-      `${repoDir}:${repoDir}`,
-      ...repoConfigMounts,
+      ...dockerVolArgs,
       IMAGE_NAME,
       "claude",
       "--dangerously-skip-permissions",
