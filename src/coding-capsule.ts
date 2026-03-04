@@ -137,7 +137,11 @@ const mounts: Partial<Record<string, BindMount>> = {
 const dockerVolArgs: string[] = [];
 const createdMountPoints: string[] = [];
 
-const sortedMounts = Object.entries(mounts).sort(([a], [b]) => a.localeCompare(b));
+const sortedMounts = Object.entries(mounts).sort(([a], [b]) => {
+  const aKey = a.endsWith('/') ? a : a + '/';
+  const bKey = b.endsWith('/') ? b : b + '/';
+  return aKey.localeCompare(bKey);
+});
 
 for (const [container, m] of sortedMounts) {
   const mount = m ?? failMe(`missing mount for ${container}`);
