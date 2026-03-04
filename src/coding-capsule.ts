@@ -104,7 +104,6 @@ const repoMcpJson = path.join(repoDir, ".mcp.json");
 // handles staging, mount-point pre-creation, and Docker flag generation.
 type BindMount = {
   host: string;
-  container: string;
   mode: "ro" | "rw";
   /** Whether the host path is a directory or a regular file. Defaults to "dir". */
   type?: "dir" | "file";
@@ -119,32 +118,33 @@ type BindMount = {
   ensureHost?: boolean;
 };
 
-const mounts: BindMount[] = [
+const mounts: Partial<Record<string, BindMount>> = {
   // Home .claude directory (staged copy; session data paths below punch through rw)
-  { host: claudeDir, container: "/home/node/.claude", mode: "rw", snapshot: true },
+  "/home/node/.claude": { host: claudeDir, mode: "rw", snapshot: true },
   // Claude authentication
-  { host: claudeJson, container: "/home/node/.claude.json", mode: "rw" },
+  "/home/node/.claude.json": { host: claudeJson, mode: "rw" },
   // Session data persistence (rw directly into the real ~/.claude)
-  { host: path.join(claudeDir, "projects"), container: "/home/node/.claude/projects", mode: "rw" },
-  { host: path.join(claudeDir, "history.jsonl"), container: "/home/node/.claude/history.jsonl", mode: "rw" },
+  "/home/node/.claude/projects": { host: path.join(claudeDir, "projects"), mode: "rw" },
+  "/home/node/.claude/history.jsonl": { host: path.join(claudeDir, "history.jsonl"), mode: "rw" },
   // Repository
-  { host: repoDir, container: repoDir, mode: "rw" },
+  [repoDir]: { host: repoDir, mode: "rw" },
   // Repo config overlays (read-only staged copies protect settings from tampering)
-  { host: repoClaudeDir, container: repoClaudeDir, mode: "ro", snapshot: true, ensureHost: true },
-  { host: repoMcpJson, container: repoMcpJson, mode: "ro", type: "file", snapshot: true, ensureHost: true },
-];
+  [repoClaudeDir]: { host: repoClaudeDir, mode: "ro", snapshot: true, ensureHost: true },
+  [repoMcpJson]: { host: repoMcpJson, mode: "ro", type: "file", snapshot: true, ensureHost: true },
+};
 
 // ── Process mount table ───────────────────────────────────────────────
 const dockerVolArgs: string[] = [];
 const createdMountPoints: string[] = [];
 
-for (const m of mounts) {
-  let hostPath = m.host;
+for (const [container, m] of Object.entries(mounts)) {
+  const mount = m ?? failMe(`missing mount for ${container}`);
+  let hostPath = mount.host;
 
-  const entityType = m.type ?? "dir";
+  const entityType = mount.type ?? "dir";
 
   // Snapshot: copy source into a dedicated temp dir so the container gets an isolated copy.
-  if (m.snapshot) {
+  if (mount.snapshot) {
     const snapshotDir = fs.mkdtempSync(path.join(tmpDir, "snapshot-"));
     const staged = path.join(snapshotDir, path.basename(hostPath));
     if (entityType === "dir") {
@@ -164,16 +164,16 @@ for (const m of mounts) {
   }
 
   // Ensure the mount-point exists on the host (avoids root-owned leftovers).
-  if (m.ensureHost && !fs.existsSync(m.container)) {
+  if (mount.ensureHost && !fs.existsSync(container)) {
     if (entityType === "dir") {
-      fs.mkdirSync(m.container);
+      fs.mkdirSync(container);
     } else {
-      fs.writeFileSync(m.container, "");
+      fs.writeFileSync(container, "");
     }
-    createdMountPoints.push(m.container);
+    createdMountPoints.push(container);
   }
 
-  const spec = `${hostPath}:${m.container}:${m.mode}`;
+  const spec = `${hostPath}:${container}:${mount.mode}`;
   dockerVolArgs.push("-v", spec);
 }
 
