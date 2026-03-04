@@ -54,18 +54,18 @@ exec "$@"
 
 const argv = yargs(hideBin(process.argv))
   .usage("$0 <repo-dir> [claude args..]")
-  .command("$0 <repo-dir>", "Run Claude Code in a sandboxed Docker container", (yargs) => {
-    yargs.positional("repo-dir", {
-      describe: "Path to the repository directory to mount",
-      type: "string",
-    });
+  .command("$0 <repo-dir>", "Run Claude Code in a sandboxed Docker container")
+  .option("repo-dir", {
+    describe: "Path to the repository directory to mount",
+    type: "string",
+    demandOption: true,
   })
   .strict(false)
   .help()
   .version()
   .parseSync();
 
-const repoDir = path.resolve(typeof argv.repoDir === "string" ? argv.repoDir : failMe("missing required argument: repo-dir"));
+const repoDir = path.resolve(argv.repoDir);
 const claudeArgs = argv._.map(String);
 
 if (!fs.existsSync(repoDir) || !fs.statSync(repoDir).isDirectory()) {
