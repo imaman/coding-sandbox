@@ -1,17 +1,25 @@
 #!/usr/bin/env node
 
 import { execFileSync } from "node:child_process";
+import { createRequire } from "node:module";
 import path from "node:path";
 import os from "node:os";
 import fs from "node:fs";
-import yargs from "yargs/yargs";
-import { hideBin } from "yargs/helpers";
 
 function failMe(message: string): never {
   throw new Error(message);
 }
 
 const IMAGE_NAME = "coding-capsule";
+
+// Handle --version ourselves; everything else is forwarded to claude.
+const args = process.argv.slice(2);
+if (args.includes("--version")) {
+  const require = createRequire(import.meta.url);
+  const pkg = require("../package.json") as { version: string };
+  console.log(pkg.version);
+  process.exit(0);
+}
 
 function dockerfile(claudeVersion: string): string {
   return `FROM node:20-bookworm
@@ -55,21 +63,8 @@ set -e
 exec "$@"
 `;
 
-const argv = yargs(hideBin(process.argv))
-  .usage("$0 <repo-dir> [claude args..]")
-  .command("$0 <repo-dir>", "Run Claude Code in a sandboxed Docker container")
-  .option("repo-dir", {
-    describe: "Path to the repository directory to mount",
-    type: "string",
-    demandOption: true,
-  })
-  .strict(false)
-  .help()
-  .version()
-  .parseSync();
-
-const repoDir = path.resolve(argv.repoDir);
-const claudeArgs = argv._.map(String);
+const claudeArgs = args;
+const repoDir = process.cwd();
 
 if (!fs.existsSync(repoDir) || !fs.statSync(repoDir).isDirectory()) {
   console.error(`Error: ${repoDir} is not a valid directory`);
