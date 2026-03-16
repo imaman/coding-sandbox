@@ -21,6 +21,23 @@ if (args.includes("--version")) {
   process.exit(0);
 }
 
+if (args.includes("--help")) {
+  console.log(`Usage: coding-capsule [options] [-- claude-args...]
+
+Run Claude Code in a sandboxed Docker container.
+
+Options:
+  -p, --expose-port <port>
+                        Forward a host port into the container so that
+                        localhost:<port> inside the container reaches the
+                        host. Can be specified multiple times.
+  --version             Show version number and exit.
+  --help                Show this help message and exit.
+
+All other arguments are forwarded to claude inside the container.`);
+  process.exit(0);
+}
+
 function dockerfile(claudeVersion: string): string {
   return `FROM node:20-bookworm
 
@@ -33,6 +50,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \\
     less \\
     procps \\
     jq \\
+    socat \\
     && sed -i '/en_US.UTF-8/s/^# //g' /etc/locale.gen \\
     && locale-gen \\
     && rm -rf /var/lib/apt/lists/*
@@ -60,10 +78,38 @@ RUN curl -fsSL https://claude.ai/install.sh | bash -s ${claudeVersion} \\
 
 const ENTRYPOINT = `#!/bin/bash
 set -e
+
+# Forward host ports into the container so that localhost:<port> reaches the host.
+if [ -n "\${CAPSULE_FORWARD_PORTS:-}" ]; then
+  IFS=',' read -ra PORTS <<< "$CAPSULE_FORWARD_PORTS"
+  for port in "\${PORTS[@]}"; do
+    socat TCP-LISTEN:"$port",fork,reuseaddr,bind=127.0.0.1 TCP:host.docker.internal:"$port" &
+  done
+fi
+
 exec "$@"
 `;
 
-const claudeArgs = args;
+// Extract --expose-port flags before forwarding the rest to claude.
+const exposedPorts: number[] = [];
+const claudeArgs: string[] = [];
+for (let i = 0; i < args.length; i++) {
+  if (args[i] === "--expose-port" || args[i] === "-p") {
+    const raw = args[++i];
+    if (raw === undefined) {
+      console.error("Error: --expose-port requires a port number");
+      process.exit(1);
+    }
+    const port = Number(raw);
+    if (!Number.isInteger(port) || port < 1 || port > 65535) {
+      console.error(`Error: invalid port number: ${raw}`);
+      process.exit(1);
+    }
+    exposedPorts.push(port);
+  } else {
+    claudeArgs.push(args[i] ?? failMe("unexpected undefined arg"));
+  }
+}
 const repoDir = process.cwd();
 
 if (!fs.existsSync(repoDir) || !fs.statSync(repoDir).isDirectory()) {
@@ -193,6 +239,16 @@ try {
     stdio: "inherit",
   });
 
+  // Port-forwarding args: expose host ports inside the container via socat.
+  const portArgs: string[] = [];
+  if (exposedPorts.length > 0) {
+    portArgs.push(
+      "--add-host=host.docker.internal:host-gateway",
+      "-e",
+      `CAPSULE_FORWARD_PORTS=${exposedPorts.join(",")}`,
+    );
+  }
+
   // Run
   execFileSync(
     "docker",
@@ -208,6 +264,7 @@ try {
       `TERM=${process.env.TERM || "xterm-256color"}`,
       "--workdir",
       repoDir,
+      ...portArgs,
       ...dockerVolArgs,
       IMAGE_NAME,
       "claude",
