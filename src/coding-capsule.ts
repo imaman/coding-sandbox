@@ -31,6 +31,8 @@ Options:
                         Forward a host port into the container so that
                         localhost:<port> inside the container reaches the
                         host. Can be specified multiple times.
+  --truecolor           Set COLORTERM=truecolor inside the container to
+                        enable 24-bit color support.
   --version             Show version number and exit.
   --help                Show this help message and exit.
 
@@ -90,8 +92,9 @@ fi
 exec "$@"
 `;
 
-// Extract --expose-port flags before forwarding the rest to claude.
+// Extract --expose-port and --truecolor flags before forwarding the rest to claude.
 const exposedPorts: number[] = [];
+let truecolor = false;
 const claudeArgs: string[] = [];
 for (let i = 0; i < args.length; i++) {
   if (args[i] === "--expose-port" || args[i] === "-p") {
@@ -106,6 +109,8 @@ for (let i = 0; i < args.length; i++) {
       process.exit(1);
     }
     exposedPorts.push(port);
+  } else if (args[i] === "--truecolor") {
+    truecolor = true;
   } else {
     claudeArgs.push(args[i] ?? failMe("unexpected undefined arg"));
   }
@@ -262,6 +267,7 @@ try {
       "HOME=/home/node",
       "-e",
       `TERM=${process.env.TERM || "xterm-256color"}`,
+      ...(truecolor ? ["-e", "COLORTERM=truecolor"] : []),
       "--workdir",
       repoDir,
       ...portArgs,
