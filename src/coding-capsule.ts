@@ -5,6 +5,8 @@ import { createRequire } from "node:module";
 import path from "node:path";
 import os from "node:os";
 import fs from "node:fs";
+import yargs from "yargs";
+import { hideBin } from "yargs/helpers";
 
 function failMe(message: string): never {
   throw new Error(message);
@@ -12,33 +14,36 @@ function failMe(message: string): never {
 
 const IMAGE_NAME = "coding-capsule";
 
-// Handle --version ourselves; everything else is forwarded to claude.
-const args = process.argv.slice(2);
-if (args.includes("--version")) {
-  const require = createRequire(import.meta.url);
-  const pkg = require("../package.json") as { version: string };
-  console.log(pkg.version);
-  process.exit(0);
-}
+const require = createRequire(import.meta.url);
+const pkg: { version: string } = require("../package.json");
 
-if (args.includes("--help")) {
-  console.log(`Usage: coding-capsule [options] [-- claude-args...]
-
-Run Claude Code in a sandboxed Docker container.
-
-Options:
-  -p, --expose-port <port>
-                        Forward a host port into the container so that
-                        localhost:<port> inside the container reaches the
-                        host. Can be specified multiple times.
-  --truecolor           Set COLORTERM=truecolor inside the container to
-                        enable 24-bit color support.
-  --version             Show version number and exit.
-  --help                Show this help message and exit.
-
-All other arguments are forwarded to claude inside the container.`);
-  process.exit(0);
-}
+const argv = await yargs(hideBin(process.argv))
+  .scriptName("coding-capsule")
+  .usage("$0 [options] [-- claude-args...]\n\nRun Claude Code in a sandboxed Docker container.")
+  .option("expose-port", {
+    alias: "p",
+    type: "number",
+    array: true,
+    description:
+      "Forward a host port into the container so that localhost:<port> inside the container reaches the host. Can be specified multiple times.",
+    default: [] as number[],
+    coerce: (ports: number[]) => {
+      for (const port of ports) {
+        if (!Number.isInteger(port) || port < 1 || port > 65535) {
+          throw new Error(`invalid port number: ${port}`);
+        }
+      }
+      return ports;
+    },
+  })
+  .option("truecolor", {
+    type: "boolean",
+    description: "Set COLORTERM=truecolor inside the container.",
+    default: true,
+  })
+  .version(pkg.version)
+  .strict(false)
+  .parse();
 
 function dockerfile(claudeVersion: string): string {
   return `FROM node:20-bookworm
@@ -92,29 +97,9 @@ fi
 exec "$@"
 `;
 
-// Extract --expose-port and --truecolor flags before forwarding the rest to claude.
-const exposedPorts: number[] = [];
-let truecolor = false;
-const claudeArgs: string[] = [];
-for (let i = 0; i < args.length; i++) {
-  if (args[i] === "--expose-port" || args[i] === "-p") {
-    const raw = args[++i];
-    if (raw === undefined) {
-      console.error("Error: --expose-port requires a port number");
-      process.exit(1);
-    }
-    const port = Number(raw);
-    if (!Number.isInteger(port) || port < 1 || port > 65535) {
-      console.error(`Error: invalid port number: ${raw}`);
-      process.exit(1);
-    }
-    exposedPorts.push(port);
-  } else if (args[i] === "--truecolor") {
-    truecolor = true;
-  } else {
-    claudeArgs.push(args[i] ?? failMe("unexpected undefined arg"));
-  }
-}
+const exposedPorts = argv.exposePort;
+const truecolor = argv.truecolor;
+const claudeArgs = argv._ .map(String);
 const repoDir = process.cwd();
 
 if (!fs.existsSync(repoDir) || !fs.statSync(repoDir).isDirectory()) {

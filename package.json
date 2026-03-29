@@ -31,9 +31,12 @@
   "engines": {
     "node": ">=20"
   },
-  "dependencies": {},
+  "dependencies": {
+    "yargs": "^18.0.0"
+  },
   "devDependencies": {
     "@types/node": "^22.0.0",
+    "@types/yargs": "^17.0.35",
     "typescript": "^5.7.0"
   }
 }
