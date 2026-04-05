@@ -194,7 +194,7 @@ for (const [container, m] of sortedMounts) {
     const staged = path.join(snapshotDir, path.basename(hostPath));
     if (entityType === "dir") {
       if (fs.existsSync(hostPath)) {
-        fs.cpSync(hostPath, staged, { recursive: true });
+        fs.cpSync(hostPath, staged, { recursive: true, dereference: true });
       } else {
         fs.mkdirSync(staged);
       }
