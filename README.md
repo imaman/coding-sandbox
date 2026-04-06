@@ -11,7 +11,8 @@ Run Claude Code in a sandboxed Docker container. The agent can read/write files 
 ## Usage
 
 ```bash
-npx coding-capsule /path/to/repo
+cd /path/to/repo
+npx coding-capsule
 ```
 
 This builds a Docker image (if needed), mounts the repo and your Claude credentials into the container, and runs Claude Code in `--dangerously-skip-permissions` mode.
@@ -19,32 +20,49 @@ This builds a Docker image (if needed), mounts the repo and your Claude credenti
 You can pass additional positional arguments through to Claude:
 
 ```bash
-npx coding-capsule /path/to/repo "fix the failing tests"
+cd /path/to/repo
+npx coding-capsule "fix the failing tests"
 ```
 
 ### Global install
 
 ```bash
 npm install -g coding-capsule
-coding-capsule /path/to/repo
+cd /path/to/repo
+coding-capsule
+```
+
+### CLI options
+
+| Option | Alias | Default | Description |
+|--------|-------|---------|-------------|
+| `--expose-port` | `-p` | — | Forward a host port into the container so that `localhost:<port>` inside the container reaches the host. Can be specified multiple times. |
+| `--truecolor` | — | `true` | Set `COLORTERM=truecolor` inside the container. Disable with `--no-truecolor`. |
+| `--version` | — | — | Show version number. |
+| `--help` | — | — | Show help. |
+
+```bash
+# Forward ports 3000 and 8080 into the container
+coding-capsule -p 3000 -p 8080
+
+# Disable true-color support
+coding-capsule --no-truecolor
 ```
 
 ## What's sandboxed
 
-- Your Claude auth credentials (`~/.claude` and `~/.claude.json`) are bind-mounted into the container
+- Your Claude auth credentials (`~/.claude` and `~/.claude.json`) are snapshotted (copied) into the container — the container cannot modify the originals. Session history and project settings mount directly for persistence.
 - No access to `~/.ssh`, `~/.aws`, `~/.config`, or any other host files
 - Network is open (the agent needs it for npm, docs, etc.)
 - The Docker image is built automatically from an embedded Dockerfile — no manual setup required
+- The container runs as the same UID/GID as your host user, so file ownership in the repo is preserved
 
 > [!WARNING]
-> Your Claude session credentials are readable inside the container. A prompt injection attack (e.g., malicious instructions hidden in a repo file) could read the credentials and exfiltrate them over the network. The token is only useful for Claude API calls, not for accessing your machine or GitHub, but be aware of this risk. To mitigate it, you could add an egress proxy that restricts outbound traffic to known-good domains.
+> Your Claude Code credentials are readable inside the container. A prompt injection attack (e.g., malicious instructions hidden in a repo file) could exfiltrate them over the network. The credentials are only useful for Claude API calls — they cannot access your machine, GitHub, or other services. The exact blast radius depends on the authentication method (OAuth token vs. raw API key). To mitigate this, you could add an egress proxy that restricts outbound traffic to known-good domains.
 
 ## Security analysis
 
-For a detailed breakdown of attack vectors and blast radius, see:
-
-- [vectors.md](vectors.md) — catalog of attack vectors and countermeasures
-- [blastradius.md](blastradius.md) — worst-case impact assessment for each scenario
+For a detailed breakdown of the security posture, see [blastradius.md](blastradius.md) — risk profile, attack surface, and mitigations.
 
 ## Rationale
 
@@ -74,10 +92,10 @@ Docker with open network and minimal host mounts. It's the pragmatic sweet spot:
 
 - Fully protects the host machine (no access to SSH keys, AWS creds, other repos, etc.)
 - Agent can still use the network for legitimate purposes (npm, docs, etc.)
-- Simple to set up — `npx coding-capsule /path/to/repo` and you're running
+- Simple to set up — `npx coding-capsule` from your repo directory and you're running
 - Repo damage is irrelevant (source-controlled)
 
-The trade-off is that the Claude session credentials are readable inside the container and could theoretically be exfiltrated over the open network. We accept this because (a) the token is only useful for Claude API calls, and (b) adding an egress proxy to close this gap is possible but adds significant complexity.
+The trade-off is that the Claude Code credentials are readable inside the container and could theoretically be exfiltrated over the open network. We accept this because (a) the credentials are only useful for Claude API calls — they cannot access your machine, GitHub, or other services, and (b) adding an egress proxy to close this gap is possible but adds significant complexity.
 
 ## Undoing changes
 
