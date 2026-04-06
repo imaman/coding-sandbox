@@ -59,10 +59,7 @@ coding-capsule --no-truecolor /path/to/repo
 
 ## Security analysis
 
-For a detailed breakdown of attack vectors and blast radius, see:
-
-- [vectors.md](vectors.md) — catalog of attack vectors and countermeasures
-- [blastradius.md](blastradius.md) — worst-case impact assessment for each scenario
+For a detailed breakdown of the security posture, see [blastradius.md](blastradius.md) — risk profile, attack surface, and mitigations.
 
 ## Rationale
 
