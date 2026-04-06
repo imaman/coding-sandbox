@@ -22,7 +22,7 @@ The agent also has unrestricted outbound network access. When `--expose-port` is
 | Source code exfiltration | High — full read access to the mounted repo + outbound network | Easy |
 | Conversation history leak | Medium — session data (`projects/`, `history.jsonl`) is directly mounted read-write; everything else in `~/.claude/` is readable via the snapshotted copy | Easy |
 | Conversation history destruction | Medium — session data is directly mounted read-write and not source-controlled; deletion or corruption is not easily reversible | Easy |
-| Host service access via forwarded ports | Low–Medium — only when `--expose-port` is used; the container can reach host services on those specific ports via socat, potentially accessing services that only listen on localhost | Requires explicit opt-in |
+| Host service access via `--expose-port` | Low–Medium — only when `--expose-port` is used; adds a `host.docker.internal` route into the container, making *all* host ports reachable (not just the ones forwarded by socat). Services that only bind to localhost (databases, dev servers, etc.) become accessible | Requires explicit opt-in |
 
 ## Mitigated Risks
 
@@ -40,10 +40,10 @@ Several other risks were considered and excluded from the table:
 
 - **Git remote history corruption:** the container has no SSH keys and no push access; confirmed via `ssh -T git@github.com` returning Permission denied.
 - **Destruction of unpushed local work:** the repo is mounted read-write, so uncommitted changes, local-only branches, and stashes could be destroyed. However, this only affects work that hasn't been pushed, making the blast radius small for teams that push frequently.
-- **Host service exposure via port forwarding:** when `--expose-port` is used, socat inside the container forwards traffic from `localhost:<port>` to `host.docker.internal:<port>`. This is opt-in and limited to explicitly specified ports. The risk is that a compromised agent could probe or interact with host services that only bind to localhost (e.g., databases, dev servers). Users should only forward ports they intend the agent to access.
+- **Host service exposure via port forwarding:** when `--expose-port` is used, `host.docker.internal` is added as a route into the container, making all host ports reachable — not just the ones forwarded by socat. Socat sets up convenient `localhost` listeners for the specified ports, but code in the container can connect to `host.docker.internal:<any-port>` directly. This is opt-in and the risk is that a compromised agent could probe or interact with any host service that binds to localhost (e.g., databases, dev servers).
 
 ## Trade-offs
 
 - Claude Code inside the container cannot modify project-level config (`.claude/settings.json`, `.claude/CLAUDE.md`, `.mcp.json`, etc.). Project instructions and settings should be set up outside the container.
 - Non-session data written to `~/.claude/` inside the container (e.g., telemetry, debug logs, cache) is discarded when the container exits.
-- Port forwarding (`--expose-port`) intentionally weakens network isolation for specific ports. Only forward ports for services you want the agent to reach.
+- Port forwarding (`--expose-port`) adds a route to the host, making *all* host ports reachable from the container — not just the specified ones. The socat listeners are a convenience; the underlying `host.docker.internal` route is what opens access.
