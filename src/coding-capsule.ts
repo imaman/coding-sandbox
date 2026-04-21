@@ -41,6 +41,12 @@ const argv = await yargs(hideBin(process.argv))
     description: "Set COLORTERM=truecolor inside the container.",
     default: true,
   })
+  .option("context-window", {
+    type: "string",
+    choices: ["normal", "shorter"] as const,
+    description: "Context window size: 'shorter' sets CLAUDE_CODE_DISABLE_1M_CONTEXT=1.",
+    default: "shorter",
+  })
   .version(pkg.version)
   .strict(false)
   .parse();
@@ -253,6 +259,7 @@ try {
       "-e",
       `TERM=${process.env.TERM || "xterm-256color"}`,
       ...(truecolor ? ["-e", "COLORTERM=truecolor"] : []),
+      ...(argv.contextWindow === "shorter" ? ["-e", "CLAUDE_CODE_DISABLE_1M_CONTEXT=1"] : []),
       "--workdir",
       repoDir,
       ...portArgs,
