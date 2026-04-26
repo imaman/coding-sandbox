@@ -42,10 +42,11 @@ const argv = await yargs(hideBin(process.argv))
     default: true,
   })
   .option("context-window", {
+    alias: "w",
     type: "string",
     choices: ["normal", "shorter"] as const,
     description: "Context window size: 'shorter' sets CLAUDE_CODE_DISABLE_1M_CONTEXT=1.",
-    default: "shorter",
+    default: "normal",
   })
   .version(pkg.version)
   .strict(false)
