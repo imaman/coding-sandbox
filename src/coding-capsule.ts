@@ -12,6 +12,22 @@ function failMe(message: string): never {
   throw new Error(message);
 }
 
+// Recursive copy that dereferences symlinks at every level.
+// fs.cpSync({ dereference: true }) is broken in Node 22.17+ / 24.x — it only rewrites
+// nested symlinks to absolute paths instead of copying their targets.
+// See https://github.com/nodejs/node/issues/59168
+function copyDereferenced(src: string, dst: string): void {
+  const stat = fs.statSync(src);
+  if (stat.isDirectory()) {
+    fs.mkdirSync(dst, { recursive: true });
+    for (const entry of fs.readdirSync(src)) {
+      copyDereferenced(path.join(src, entry), path.join(dst, entry));
+    }
+  } else {
+    fs.copyFileSync(src, dst);
+  }
+}
+
 const IMAGE_NAME = "coding-capsule";
 
 const require = createRequire(import.meta.url);
@@ -201,7 +217,7 @@ for (const [container, m] of sortedMounts) {
     const staged = path.join(snapshotDir, path.basename(hostPath));
     if (entityType === "dir") {
       if (fs.existsSync(hostPath)) {
-        fs.cpSync(hostPath, staged, { recursive: true, dereference: true });
+        copyDereferenced(hostPath, staged);
       } else {
         fs.mkdirSync(staged);
       }
