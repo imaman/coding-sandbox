@@ -29,7 +29,7 @@
   "author": "imaman",
   "license": "MIT",
   "engines": {
-    "node": ">=20"
+    "node": ">=22"
   },
   "dependencies": {
     "yargs": "^18.0.0"
