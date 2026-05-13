@@ -69,7 +69,7 @@ const argv = await yargs(hideBin(process.argv))
   .parse();
 
 function dockerfile(claudeVersion: string): string {
-  return `FROM node:20-bookworm
+  return `FROM node:24-bookworm
 
 RUN apt-get update && apt-get install -y --no-install-recommends \\
     git \\
